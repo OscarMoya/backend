@@ -15,3 +15,9 @@ POSTGRES_PASSWORD = "test"
 
 # API
 URL_PATH = "/rest"
+
+# Authentication
+BAKEND_PORT = 8000
+FRONTEND_PORT = 3000
+BACKEND_URL = f"http://localhost:{BAKEND_PORT}"
+FRONTEND_URL = f"http://localhost:{FRONTEND_PORT}"
