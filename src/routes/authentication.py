@@ -1,4 +1,6 @@
 import os
+import re
+from pydantic import BaseModel
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -20,11 +22,10 @@ from supertokens_python.recipe import (
     thirdparty,
     emailpassword,
 )
-from supertokens_python.recipe.session import SessionContainer
+
+from supertokens_python.recipe.emailpassword.asyncio import sign_in, sign_up
+from supertokens_python.recipe.emailpassword.interfaces import SignInOkResult, SignInWrongCredentialsError
 from supertokens_python.recipe.session.framework.fastapi import verify_session
-from supertokens_python.async_to_sync_wrapper import sync
-from supertokens_python.recipe.emailpassword.interfaces import APIInterface, APIOptions, SignUpOkResult, SignInOkResult
-from supertokens_python.recipe.emailpassword.asyncio import sign_in
 
 import constants
 
@@ -59,31 +60,37 @@ init(
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
+class UserCredentials(BaseModel):
+    tenant_id: str
+    email: str
+    password: str
 
-@app.post("/auth/signup")
-async def signup():
-    pass  # Esta ruta se manejará automáticamente por Supertokens
+@app.post("/backend/register")
+async def register_user(credentials: UserCredentials):
+    try:
+        user = await sign_up(credentials.tenant_id, credentials.email, credentials.password)
+        return {"user": user}
+    except Exception as e:
+        return {"error": str(e)}
 
-
-@app.post("/auth/token")
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    response = await sign_in("", form_data.username, form_data.password)
-    if isinstance(response, SignInOkResult):
-        s = await session.create_new_session(None, response.user.user_id, {}, {})
-        return {
-            "access_token": s.get_access_token(),
-            "token_type": "bearer"
-        }
-    raise HTTPException(status_code=400, detail="Incorrect email or password")
+@app.post("/backend/login")
+async def login_user(credentials: UserCredentials):
+    try:
+        response = await sign_in(credentials.tenant_id ,credentials.email, credentials.password)
+        if isinstance(response, SignInOkResult):
+            return {"user": response.user}
+        elif isinstance(response, SignInWrongCredentialsError):
+            return {"error": response}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @app.get("/protected-route")
-async def protected_route(token: str = Depends(oauth2_scheme)):
-    # Aquí puedes verificar el token si lo necesitas
+async def protected_route(token: str = Depends(verify_session())):
     return {"message": "This is a protected route"}
 
 
 @app.get("/users/me")
-async def get_user_info(token: str = Depends(oauth2_scheme)):
-    # Aquí puedes decodificar el token y obtener información del usuario
+async def get_user_info(token: str = Depends(verify_session())):
     return {"user": "user_info"}
+
